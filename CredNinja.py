@@ -41,6 +41,14 @@ settings = {'os': False,
            }
 
 
+# Regexes
+dateRegex = re.compile("([a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}\s[0-9]{4})\s*$")
+usernameRegex = re.compile("(^\s+[a-zA-Z0-9\.\s]+)\sD\s")
+os_reg = re.compile("OS=\[([^\]]+)\]")
+domain_reg = re.compile("Domain=\[([^\]]+)\]")
+regResult = re.compile("NT_([a-zA-Z_]*)")
+
+
 
 
 def main():
@@ -174,13 +182,11 @@ def search_users(command,output_from_previous):
         output = raw_output.decode('utf-8')
         for line in output.splitlines():
             if ' D ' in line and not re.match("^\s+\.", line):
-                dateRegex = re.compile("([a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}\s[0-9]{4})\s*$")
                 date_group = dateRegex.search(line)
                 if (date_group is not None):
                     date_obj = datetime.datetime.strptime(date_group.group(1), '%b %d %H:%M:%S %Y')
                     diff = now - date_obj
                     if (diff.days < settings['users_time']):
-                        usernameRegex = re.compile("(^\s+[a-zA-Z0-9\.\s]+)\sD\s")
                         user_group = usernameRegex.search(line)
                         if (user_group is not None):
                             username = user_group.group(1).strip()
@@ -241,12 +247,10 @@ def check_result(output):
     global list_of_codes
     add_on = ''
     if settings['os']:
-        os_reg = re.compile("OS=\[([^\]]+)\]")
         matches = os_reg.search(output)
         if matches is not None:
             add_on = '(os=' + matches.group(1) + ')'
     if settings['domain']:
-        domain_reg = re.compile("Domain=\[([^\]]+)\]")
         matches = domain_reg.search(output)
         if matches is not None:
             add_on += '(domain=' + matches.group(1) + ')'
@@ -254,7 +258,6 @@ def check_result(output):
         if code in output:
             return [code, list_of_codes[code],add_on]
 
-    regResult = re.compile("NT_([a-zA-Z_]*)")
     matches = regResult.search(output)
     if matches is not None:
         return [matches.group(1), 'Unknown Error: ' + matches.group(1), add_on]
@@ -294,7 +297,7 @@ def parse_cli_args():
     additional_args = parser.add_argument_group('Additional Information Retrieval')
     additional_args.add_argument('--os', default=False, action='store_true', help='Display the OS of the system if available (no extra packet is being sent)')
     additional_args.add_argument('--domain', default=False, action='store_true', help='Display the primary domain of the system if available (no extra packet is being sent)')
-    additional_args.add_argument('--users', default=False, action='store_true', help='List the users that have logged in to the system in the last 6 months (requires LOCAL ADMIN)')
+    additional_args.add_argument('--users', default=False, action='store_true', help='List the users that have logged in to the system in the last 6 months (requires LOCAL ADMIN). Returns usernames with the number of days since their home directory was changed')
     additional_args.add_argument('--users-time', default=100, type=int, help='Modifies --users to search for users that have logged in within the last supplied amount of days (default 100 days)')
     args = parser.parse_args()
     if args.accounts is None or args.servers is None:
