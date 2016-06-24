@@ -1,0 +1,84 @@
+
+
+
+   .d8888b.                       888 888b    888 d8b           d8b          
+  d88P  Y88b                      888 8888b   888 Y8P           Y8P          
+  888    888                      888 88888b  888                            
+  888        888d888 .d88b.   .d88888 888Y88b 888 888 88888b.  8888  8888b.  
+  888        888P"  d8P  Y8b d88" 888 888 Y88b888 888 888 "88b "888     "88b 
+  888    888 888    88888888 888  888 888  Y88888 888 888  888  888 .d888888 
+  Y88b  d88P 888    Y8b.     Y88b 888 888   Y8888 888 888  888  888 888  888 
+   "Y8888P"  888     "Y8888   "Y88888 888    Y888 888 888  888  888 "Y888888 
+                                                                888          
+                                                               d88P          
+                                                             888P"           
+
+                    v2.0 (Built 6/24/2016) - Chris King (@raikiasec)
+
+                         For help: ./CredNinja.py -h
+
+usage: CredNinja.py -a accounts_to_test.txt -s systems_to_test.txt
+                    [-t THREADS] [--ntlm] [--valid] [--invalid] [-o OUTPUT]
+                    [-p PASSDELIMITER] [--delay SECONDS %JITTER]
+                    [--timeout TIMEOUT] [--stripe] [--scan]
+                    [--scan-timeout SCAN_TIMEOUT] [-h] [--no-color] [--os]
+                    [--domain] [--users] [--users-time USERS_TIME]
+
+Quickly check the validity of multiple user credentials across multiple
+servers and be notified if that user has local administrator rights on each
+server.
+
+Required Arguments:
+  -a accounts_to_test.txt, --accounts accounts_to_test.txt
+                        A word or file of user credentials to test. Usernames
+                        are accepted in the form of "DOMAIN\USERNAME:PASSWORD"
+  -s systems_to_test.txt, --servers systems_to_test.txt
+                        A word or file of servers to test against. Each
+                        credential will be tested against each of these
+                        servers by attempting to browse C$ via SMB
+
+Optional Arguments:
+  -t THREADS, --threads THREADS
+                        Number of threads to use. Defaults to 10
+  --ntlm                Treat the passwords as NTLM hashes and attempt to
+                        pass-the-hash!
+  --valid               Only print valid/local admin credentials
+  --invalid             Only print invalid credentials
+  -o OUTPUT, --output OUTPUT
+                        Print results to a file
+  -p PASSDELIMITER, --passdelimiter PASSDELIMITER
+                        Change the delimiter between the account username and
+                        password. Defaults to ":"
+  --delay SECONDS %JITTER
+                        Delay each request per thread by specified seconds
+                        with jitter (example: --delay 20 10, 20 second delay
+                        with 10% jitter)
+  --timeout TIMEOUT     Amount of seconds wait for data before timing out.
+                        Default is 15 seconds
+  --stripe              Only test one credential on one host to avoid spamming
+                        a single system with multiple login attempts (used to
+                        check validity of credentials). This will randomly
+                        select hosts from the provided host file.
+  --scan                Perform a quick check to see port 445 is available on
+                        the host before queueing it up to be processed
+  --scan-timeout SCAN_TIMEOUT
+                        Sets the timeout for the scan specified by --scan
+                        argument. Default of 2 seconds
+  -h, --help            Get help about this script's usage
+  --no-color            Turns off output color. Written file is always
+                        colorless
+
+Additional Information Retrieval:
+  --os                  Display the OS of the system if available (no extra
+                        request is being sent)
+  --domain              Display the primary domain of the system if available
+                        (no extra request is being sent)
+  --users               List the users that have logged in to the system in
+                        the last 6 months (requires LOCAL ADMIN). Returns
+                        usernames with the number of days since their home
+                        directory was changed. This sends one extra request to
+                        each host
+  --users-time USERS_TIME
+                        Modifies --users to search for users that have logged
+                        in within the last supplied amount of days (default
+                        100 days)
