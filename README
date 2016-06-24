@@ -1,3 +1,20 @@
+This tool supersedes my other tool CredSwissArmy.
+
+This tool is intended for penetration testers who want to perform an engagement 
+quickly and efficiently. While this tool can be used for more covert operations 
+(including some additions below), it really shines when used at the scale of a 
+large network.
+
+At the core of it, you provide it a list of credentials you have dumped (or hashes, 
+it can pass-the-hash) and a list of systems on the domain (I suggest scanning for 
+port 445 first, or you can use "--scan"). It will tell you if the credentials you 
+dumped are valid on the domain, and if you have local administrator access to a host. 
+See below for additional features, like user hunting and host detail enumeration.
+
+It is intended to be run on Kali Linux
+
+
+
 
 
 
