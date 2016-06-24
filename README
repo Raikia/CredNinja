@@ -96,20 +96,35 @@ Changelog:
 
    v2.0 - Initial release of CredNinja from the predecessor CredSwissArmy:
 
-	* Same ability as the previous CredSwissArmy (using credentials and host list to search for Local Admin access across a network via SMB)
+	* Same ability as the previous CredSwissArmy (using credentials and host list
+	  to search for Local Admin access across a network via SMB)
         * Fully multithreaded!  It is 8x the speed of the old CredSwissArmy!
         * Handles errors and complex passwords much better
         * Can still pass-the-hash with the "--ntlm" option
         * Still has the same arguments as before
         * Added "--timeout", which allows scans to get done faster if you wish
-        * Added "--scan", which runs a quick port 445 scan of the hosts to make sure they are connectable before trying creds on them
-        * Added "--stripe", which tests each credential once across a random system (used to validate credentials without appearing suspicious in one systems' event log)
-        * Added "--delay", which allows you to specify a delay between scanning hosts to be more covert.  "--delay 10 20" will delay for 10 seconds with a 20% jitter (so between 8-10 seconds)
+        * Added "--scan", which runs a quick port 445 scan of the hosts to make sure 
+	  they are connectable before trying creds on them
+        * Added "--stripe", which tests each credential once across a random system 
+	  (used to validate credentials without appearing suspicious in one systems' 
+	  event log)
+        * Added "--delay", which allows you to specify a delay between scanning hosts 
+	  to be more covert.  "--delay 10 20" will delay for 10 seconds with a 20% 
+	  jitter (so between 8-10 seconds)
         * Added color output so its more obvious when you get success!
 
-	**AND NOW THE COOL ADDITIONS**
+	AND NOW THE COOL ADDITIONS
 
-        * Added "--os", which shows the operating system of each system that it can fingerprint (no additional packet is sent to target host)
-        * Added "--domain", which shows the primary domain the system is a member of (no additional packet is sent to the target host)
-        * Added "--users", which shows a list of users' whose home directories have been modified in X amount of days (X is modifiable by "--users-days", default of 100). Basically an SMB User-Hunter that shows where users are logged in to or have been logged in to  (1 additional packet is sent to each target host)
-        * Coming soon: Anti-virus detector to give notice to potential antivirus running on the system
+        * Added "--os", which shows the operating system of each system that it can 
+	  fingerprint (no additional packet is sent to target host)
+        * Added "--domain", which shows the primary domain the system is a member of 
+	  (no additional packet is sent to the target host)
+        * Added "--users", which shows a list of users' whose home directories have 
+	  been modified in X amount of days (X is modifiable by "--users-days", default 
+	  of 100). Basically an SMB User-Hunter that shows where users are logged in to 
+	  or have been logged in to  (1 additional packet is sent to each target host)
+        * Coming soon: Anti-virus detector to give notice to potential antivirus running 
+	  on the system
+
+
+
