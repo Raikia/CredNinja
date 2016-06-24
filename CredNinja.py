@@ -11,6 +11,8 @@ import subprocess
 import collections
 import random
 import time
+import datetime
+
 
 output_file_lock = threading.Lock()
 output_file_handler = None
@@ -30,7 +32,13 @@ list_of_codes = collections.OrderedDict([('LOGON_FAILURE',                'Inval
                                        ])
 
 
-settings = {}
+settings = {'os': False,
+            'domain': False,
+            'timeout': 15,
+            'delay': None,
+            'users': False,
+            'users_time': 100
+           }
 
 
 
@@ -59,6 +67,8 @@ def main():
     settings['domain'] = args.domain
     settings['timeout'] = args.timeout
     settings['delay'] = args.delay
+    settings['users'] = args.users
+    settings['users_time'] = args.users_time
     hosts_to_check = []
     creds_to_check = []
     mode = 'all'
@@ -129,7 +139,7 @@ def main():
             for i in range(len(creds_to_check)):
                 credQueue.put([hosts_to_check[i], creds_to_check[i]])
 
-        if settings['os'] or settings['domain']:
+        if settings['os'] or settings['domain'] or settings['users']:
             print("%-35s %-35s %-35s %-25s %s" % ("Server", "Username", passwd_header, "Response", "Info"))
         else:
             print("%-35s %-35s %-35s %-25s" % ("Server", "Username", passwd_header, "Response"))
@@ -151,6 +161,48 @@ def main():
         output_file_handler.close()
 
 
+def search_users(command,output_from_previous):
+    if ' Users ' in output_from_previous:
+        command[6] = 'cd "Users";dir'
+    elif ' Documents and Settings ' in output_from_previous:
+        command[6] = 'cd "Documents and Settings";dir'
+    now = datetime.datetime.now()
+    p = subprocess.Popen(command,stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    total_users = []
+    try:
+        raw_output,errors = p.communicate(timeout=settings['timeout'])
+        output = raw_output.decode('utf-8')
+        for line in output.splitlines():
+            if ' D ' in line and not re.match("^\s+\.", line):
+                dateRegex = re.compile("([a-zA-Z]{3}\s+[0-9]{1,2}\s[0-9]{2}:[0-9]{2}:[0-9]{2}\s[0-9]{4})\s*$")
+                date_group = dateRegex.search(line)
+                if (date_group is not None):
+                    date_obj = datetime.datetime.strptime(date_group.group(1), '%b %d %H:%M:%S %Y')
+                    diff = now - date_obj
+                    if (diff.days < settings['users_time']):
+                        usernameRegex = re.compile("(^\s+[a-zA-Z0-9\.\s]+)\sD\s")
+                        user_group = usernameRegex.search(line)
+                        if (user_group is not None):
+                            username = user_group.group(1).strip()
+                            add_sorted_users(username, diff.days, total_users)
+        result_arr = []
+        for user in total_users:
+            result_arr.append(user[0] + ' ('+str(user[1])+')')
+        if len(result_arr) == 0:
+            result_arr.append('None within '+ str(settings['users_time']) +' days')
+        return '(users=' + str(','.join(result_arr)) + ')'
+    except Exception as e:
+        return '(users=Timed out getting users)'
+
+
+def add_sorted_users(user, days, full_list):
+    for i in range(len(full_list)):
+        if full_list[i][1] > days:
+            full_list.insert(i, [user, days])
+            return
+    full_list.append([user,days])
+    
+
 
 def run_check(mode, stock_command, system, cred):
     command = stock_command[:]
@@ -160,10 +212,15 @@ def run_check(mode, stock_command, system, cred):
     p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     res = ('','','')
     try:
-        output,errors = p.communicate(timeout=settings['timeout'])
-        res = check_result(output.decode('utf-8'))
+        raw_output,errors = p.communicate(timeout=settings['timeout'])
+        output = raw_output.decode('utf-8')
+        res = check_result(output)
     except:
-        res = ('Unknown', 'Timed out', '')
+        res = ['Unknown', 'Timed out', '']
+        output = ''
+
+    if 'LOCAL ADMIN' in res[1] and settings['users']:
+        res[2] += search_users(command[:],output)
     out_string = ''
     if res[2] == '':
         out_string = "%-35s %-35s %-35s %-25s" % (system, cred[0], cred[1], res[1])
@@ -195,13 +252,13 @@ def check_result(output):
             add_on += '(domain=' + matches.group(1) + ')'
     for code in list_of_codes.keys():
         if code in output:
-            return (code, list_of_codes[code],add_on)
+            return [code, list_of_codes[code],add_on]
 
     regResult = re.compile("NT_([a-zA-Z_]*)")
     matches = regResult.search(output)
     if matches is not None:
-        return (matches.group(1), 'Unknown Error: ' + matches.group(1), add_on)
-    return ('Unknown', 'No Data', add_on)
+        return [matches.group(1), 'Unknown Error: ' + matches.group(1), add_on]
+    return ['Unknown', 'No Data', add_on]
 
 def write_output(text):
     global output_file_handler
@@ -237,6 +294,8 @@ def parse_cli_args():
     additional_args = parser.add_argument_group('Additional Information Retrieval')
     additional_args.add_argument('--os', default=False, action='store_true', help='Display the OS of the system if available (no extra packet is being sent)')
     additional_args.add_argument('--domain', default=False, action='store_true', help='Display the primary domain of the system if available (no extra packet is being sent)')
+    additional_args.add_argument('--users', default=False, action='store_true', help='List the users that have logged in to the system in the last 6 months (requires LOCAL ADMIN)')
+    additional_args.add_argument('--users-time', default=100, type=int, help='Modifies --users to search for users that have logged in within the last supplied amount of days (default 100 days)')
     args = parser.parse_args()
     if args.accounts is None or args.servers is None:
         parser.print_help()
