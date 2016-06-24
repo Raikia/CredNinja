@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+import socket
 import os
 import shutil
 import threading
@@ -20,15 +21,21 @@ credQueue = queue.Queue()
 
 
 
-list_of_codes = collections.OrderedDict([('LOGON_FAILURE',                'Invalid Creds'),
-                                         ('ACCESS_DENIED',                'Valid'),
-                                         ('STATUS_UNSUCCESSFUL',          'Unsuccessful connection'),
-                                         ('STATUS_NETWORK_UNREACHABLE',   'Network Unreachable'),
-                                         ('STATUS_INVALID_PARAMETER_MIX', 'Invalid PW/Hash'),
-                                         ('STATUS_BAD_NETWORK_NAME',      'Invalid host'),
-                                         ('STATUS_IO_TIMEOUT',            'IO Timeout on target'),
-                                         ('STATUS_CONNECTION_RESET',      'Connection reset'),
-                                         ('OS=',                          'LOCAL ADMIN! Valid')
+list_of_codes = collections.OrderedDict([('LOGON_FAILURE',                       'Invalid Creds'),
+                                         ('ACCESS_DENIED',                       'Valid'),
+                                         ('STATUS_UNSUCCESSFUL',                 'Unsuccessful Connection'),
+                                         ('STATUS_NETWORK_UNREACHABLE',          'Network Unreachable'),
+                                         ('STATUS_INVALID_PARAMETER_MIX',        'Invalid PW/Hash Format'),
+                                         ('STATUS_BAD_NETWORK_NAME',             'Bad Network Name'),
+                                         ('STATUS_IO_TIMEOUT',                   'IO Timeout on Target'),
+                                         ('STATUS_CONNECTION_RESET',             'Connection Reset'),
+					 ('STATUS_INVALID_NETWORK_RESPONSE',     'Invalid Response'),
+                                         ('STATUS_INSUFF_SERVER_RESOURCES',      'No Resources Available'),
+                                         ('STATUS_TRUSTED_RELATIONSHIP_FAILURE', 'Trust Relation Failed'),
+                                         ('STATUS_LOGON_TYPE_NOT_GRANTED',       'Logon Type Not Granted'),
+                                         ('STATUS_INVALID_PARAMETER',            'Invalid Parameter'),
+                                         ('STATUS_DUPLICATE_NAME',               'Duplicate Name'),
+                                         (' D ',                                 'LOCAL ADMIN! Valid')
                                        ])
 
 
@@ -37,7 +44,10 @@ settings = {'os': False,
             'timeout': 15,
             'delay': None,
             'users': False,
-            'users_time': 100
+            'users_time': 100,
+            'scan': False,
+            'scan_timeout': 2,
+            'no_color': False
            }
 
 
@@ -49,27 +59,38 @@ domain_reg = re.compile("Domain=\[([^\]]+)\]")
 regResult = re.compile("NT_([a-zA-Z_]*)")
 
 
+version_number = '2.0'
+version_build = '6/24/2016'
+
+
+text_green = '\033[92m'
+text_blue = '\033[94m'
+text_yellow = '\033[93m'
+text_red = '\033[91m'
+text_end = '\033[0m'
 
 
 def main():
-    global output_file_handler, settings
-    print("""
+    global output_file_handler, settings, text_green, text_blue, text_yellow, text_red, text_end
+    print(text_blue + """
 
 
-	 .d8888b.                       888 888b    888 d8b           d8b          
-	d88P  Y88b                      888 8888b   888 Y8P           Y8P          
-	888    888                      888 88888b  888                            
-	888        888d888 .d88b.   .d88888 888Y88b 888 888 88888b.  8888  8888b.  
-	888        888P"  d8P  Y8b d88" 888 888 Y88b888 888 888 "88b "888     "88b 
-	888    888 888    88888888 888  888 888  Y88888 888 888  888  888 .d888888 
-	Y88b  d88P 888    Y8b.     Y88b 888 888   Y8888 888 888  888  888 888  888 
-	 "Y8888P"  888     "Y8888   "Y88888 888    Y888 888 888  888  888 "Y888888 
-	                                                              888          
-	                                                             d88P          
-	                                                           888P"           
+   .d8888b.                       888 888b    888 d8b           d8b          
+  d88P  Y88b                      888 8888b   888 Y8P           Y8P          
+  888    888                      888 88888b  888                            
+  888        888d888 .d88b.   .d88888 888Y88b 888 888 88888b.  8888  8888b.  
+  888        888P"  d8P  Y8b d88" 888 888 Y88b888 888 888 "88b "888     "88b 
+  888    888 888    88888888 888  888 888  Y88888 888 888  888  888 .d888888 
+  Y88b  d88P 888    Y8b.     Y88b 888 888   Y8888 888 888  888  888 888  888 
+   "Y8888P"  888     "Y8888   "Y88888 888    Y888 888 888  888  888 "Y888888 
+                                                                888          
+                                                               d88P          
+                                                             888P"           
 
-                    v2.0 (Built 6/24/2016) - Chris King (@raikiasec)
-""")
+                    v{} (Built {}) - Chris King (@raikiasec)
+
+                         For help: ./CredNinja.py -h
+""".format(version_number,version_build) + text_end)
     args = parse_cli_args()
     settings['os'] = args.os
     settings['domain'] = args.domain
@@ -77,22 +98,31 @@ def main():
     settings['delay'] = args.delay
     settings['users'] = args.users
     settings['users_time'] = args.users_time
+    settings['scan'] = args.scan
+    settings['scan_timeout'] = args.scan_timeout
+    settings['no_color'] = args.no_color
     hosts_to_check = []
     creds_to_check = []
     mode = 'all'
+    if settings['no_color']:
+        text_blue = ''
+        text_green = ''
+        text_red = ''
+        text_yellow = ''
+        text_end = ''
     if os.path.isfile(args.accounts):
         with open(args.accounts) as accountfile:
             for line in accountfile:
                 if line.strip():
                     parts = line.strip().split(args.passdelimiter,1)
                     if len(parts) != 2:
-                        print("ERROR: Credential '" + line.strip() + "' did not have the password delimiter")
+                        print(text_red + "ERROR: Credential '" + line.strip() + "' did not have the password delimiter" + text_end)
                         sys.exit(1)
                     creds_to_check.append(parts)
     else:
         parts = args.accounts.strip().split(args.passdelimiter,1)
         if len(parts) != 2:
-            print("ERROR: Credential '" + args.accounts.strip() + "' did not have the password delimiter")
+            print(text_red + "ERROR: Credential '" + args.accounts.strip() + "' did not have the password delimiter" + text_end)
             sys.exit(1)
         creds_to_check.append(parts)
 
@@ -104,7 +134,7 @@ def main():
     else:
         hosts_to_check.append(args.servers)
     if len(hosts_to_check) == 0 or len(creds_to_check) == 0:
-        print("ERROR: You must supply hosts and credentials at least!")
+        print(text_red + "ERROR: You must supply hosts and credentials at least!" + text_end)
         sys.exit(1)
     
     mode = 'a'
@@ -120,7 +150,7 @@ def main():
     
     command_list = ['smbclient', '-U', '', '', '', '-c', 'dir']
     if args.ntlm and shutil.which('pth-smbclient') is None:
-        print("ERROR: pth-smbclient is not found!  Make sure you install it (or use Kali!)")
+        print(text_red + "ERROR: pth-smbclient is not found!  Make sure you install it (or use Kali!)" + text_end)
         sys.exit(1)
     elif args.ntlm:
         command_list[0] = 'pth-smbclient'
@@ -133,25 +163,44 @@ def main():
         args.threads = len(hosts_to_check) * len(creds_to_check)
 
     try:
+        if settings['os'] or settings['domain'] or settings['users']:
+            print(text_yellow + ("%-35s %-35s %-35s %-25s %s" % ("Server", "Username", passwd_header, "Response", "Info")) + text_end)
+        else:
+            print(text_yellow + ("%-35s %-35s %-35s %-25s " % ("Server", "Username", passwd_header, "Response")) + text_end)
+        print(text_yellow + "------------------------------------------------------------------------------------------------------------------------------------------------------" + text_end)
+
         if args.stripe == None:
+            total = len(hosts_to_check)
+            done = -1
+            last_status_report = -1
+            if settings['scan']:
+                print(text_green + "[!] Starting scan of port 445 on all " + str(len(hosts_to_check)) + " hosts...." +  text_end)
             for host in hosts_to_check:
+                done += 1
+                if settings['scan']:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(settings['scan_timeout'])
+                    percent_done = int((done / total) * 100)
+                    if (percent_done%5 == 0 and percent_done != last_status_report):
+                        print(text_green + "[*] " + str(percent_done) + "% done... [" + str(done) + "/" + str(total) + "]" + text_end)
+                        last_status_report = percent_done
+                    try:
+                        s.connect((host,445))
+                        s.close()
+                    except Exception:
+                        print("%-35s %-35s %-35s %-25s" % (host, "N/A", "N/A", text_red + "Failed Portscan" + text_end))
+                        continue
                 for cred in creds_to_check:
                     credQueue.put([host, cred])
         else:
             if len(hosts_to_check) < len(creds_to_check):
-                print("ERROR: For striping to work, you must have the same number or more hosts than you do creds!")
+                print(text_red + "ERROR: For striping to work, you must have the same number or more hosts than you do creds!"  + text_end)
                 sys.exit(1)
             if (len(creds_to_check) < args.threads):
                 args.threads = len(creds_to_check)
             random.shuffle(hosts_to_check)
             for i in range(len(creds_to_check)):
                 credQueue.put([hosts_to_check[i], creds_to_check[i]])
-
-        if settings['os'] or settings['domain'] or settings['users']:
-            print("%-35s %-35s %-35s %-25s %s" % ("Server", "Username", passwd_header, "Response", "Info"))
-        else:
-            print("%-35s %-35s %-35s %-25s" % ("Server", "Username", passwd_header, "Response"))
-        print("------------------------------------------------------------------------------------------------------------------------------------------------------")
 
         thread_list = []
         for i in range(args.threads):
@@ -232,13 +281,19 @@ def run_check(mode, stock_command, system, cred):
         out_string = "%-35s %-35s %-35s %-25s" % (system, cred[0], cred[1], res[1])
     else:
         out_string = "%-35s %-35s %-35s %-25s %s" % (system, cred[0], cred[1], res[1], res[2])
-
+    color_string = out_string
+    if 'LOCAL ADMIN' in color_string:
+        color_string = text_green + out_string + text_end
+    elif 'Valid' in out_string:
+        color_string = text_blue + out_string + text_end
+    else:
+        color_string = text_red + out_string + text_end
     if (mode == 'a' or mode == 'i') and 'Valid' not in res[1]:
-        print(out_string)
+        print(color_string)
         write_output(out_string)
     
     if (mode == 'a' or mode == 'v') and 'Valid' in res[1]:
-        print(out_string)
+        print(color_string)
         write_output(out_string)
 
 
@@ -292,12 +347,15 @@ def parse_cli_args():
     optional_args.add_argument('--delay', default=None, type=int, nargs=2, metavar=('SECONDS', '%JITTER'), help='Delay each request per thread by specified seconds with jitter (example: --delay 20 10, 20 second delay with 10%% jitter)')
     optional_args.add_argument('--timeout', default=15, type=int, help='Amount of seconds wait for data before timing out.  Default is 15 seconds')
     optional_args.add_argument('--stripe', default=None, action='store_true', help='Only test one credential on one host to avoid spamming a single system with multiple login attempts (used to check validity of credentials). This will randomly select hosts from the provided host file.')
+    optional_args.add_argument('--scan', default=False, action='store_true', help='Perform a quick check to see port 445 is available on the host before queueing it up to be processed')
+    optional_args.add_argument('--scan-timeout', default=2, type=int, help='Sets the timeout for the scan specified by --scan argument.  Default of 2 seconds')
     optional_args.add_argument('-h', '--help', action='help', help='Get help about this script\'s usage')
-    
+    optional_args.add_argument('--no-color', default=False, action='store_true', help='Turns off output color. Written file is always colorless')
+
     additional_args = parser.add_argument_group('Additional Information Retrieval')
-    additional_args.add_argument('--os', default=False, action='store_true', help='Display the OS of the system if available (no extra packet is being sent)')
-    additional_args.add_argument('--domain', default=False, action='store_true', help='Display the primary domain of the system if available (no extra packet is being sent)')
-    additional_args.add_argument('--users', default=False, action='store_true', help='List the users that have logged in to the system in the last 6 months (requires LOCAL ADMIN). Returns usernames with the number of days since their home directory was changed')
+    additional_args.add_argument('--os', default=False, action='store_true', help='Display the OS of the system if available (no extra request is being sent)')
+    additional_args.add_argument('--domain', default=False, action='store_true', help='Display the primary domain of the system if available (no extra request is being sent)')
+    additional_args.add_argument('--users', default=False, action='store_true', help='List the users that have logged in to the system in the last 6 months (requires LOCAL ADMIN). Returns usernames with the number of days since their home directory was changed. This sends one extra request to each host')
     additional_args.add_argument('--users-time', default=100, type=int, help='Modifies --users to search for users that have logged in within the last supplied amount of days (default 100 days)')
     args = parser.parse_args()
     if args.accounts is None or args.servers is None:
