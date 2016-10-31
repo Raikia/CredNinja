@@ -91,6 +91,11 @@ def main():
 
                          For help: ./CredNinja.py -h
 """.format(version_number,version_build) + text_end)
+
+
+    if sys.version_info < (3,0):
+        print("ERROR: CredNinja runs on Python 3.  Run as \"./CredNinja.py\" or \"python3 CredNinja.py\"!")
+        sys.exit(1)
     args = parse_cli_args()
     settings['os'] = args.os
     settings['domain'] = args.domain
