@@ -155,7 +155,7 @@ def main():
     if args.output:
         output_file_handler = open(args.output, 'w')
     
-    command_list = ['smbclient', '-U', '', '', '', '-c', 'dir']
+    command_list = ['smbclient', '-U', '', '', '', '-c', 'dir', '-m', 'SMB3']
     if args.ntlm and shutil.which('pth-smbclient') is None:
         print(text_red + "ERROR: pth-smbclient is not found!  Make sure you install it (or use Kali!)" + text_end)
         sys.exit(1)
