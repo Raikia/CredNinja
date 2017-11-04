@@ -37,6 +37,8 @@ list_of_codes = collections.OrderedDict([('LOGON_FAILURE',                      
                                          ('STATUS_DUPLICATE_NAME',               'Duplicate Name'),
 					 ('STATUS_NOT_IMPLEMENTED',		 'Invalid Function'),
 					 ('STATUS_ACCOUNT_LOCKED_OUT',		 'Account Locked!'),
+					 ('STATUS_ACCOUNT_DISABLED',		 'Account Disabled'),
+					 ('STATUS_CONNECTION_DISCONNECTED',      'Connection Disconnected'),
                                          (' D ',                                 'LOCAL ADMIN! Valid')
                                        ])
 
