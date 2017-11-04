@@ -67,8 +67,8 @@ domain_reg = re.compile("Domain=\[([^\]]+)\]")
 regResult = re.compile("NT_([a-zA-Z_]*)")
 
 
-version_number = '2.0'
-version_build = '6/24/2016'
+version_number = '2.1'
+version_build = '11/03/2017'
 
 
 text_green = '\033[92m'
