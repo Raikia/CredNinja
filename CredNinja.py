@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 
-import argparse
 import sys
+if sys.version_info < (3,0):
+	print("ERROR: CredNinja runs on Python 3.  Run as \"./CredNinja.py\" or \"python3 CredNinja.py\"!")
+	sys.exit(1)
+
+import argparse
 import socket
 import os
 import shutil
