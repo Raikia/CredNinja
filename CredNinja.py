@@ -2,8 +2,8 @@
 
 import sys
 if sys.version_info < (3,0):
-	print("ERROR: CredNinja runs on Python 3.  Run as \"./CredNinja.py\" or \"python3 CredNinja.py\"!")
-	sys.exit(1)
+    print("ERROR: CredNinja runs on Python 3.  Run as \"./CredNinja.py\" or \"python3 CredNinja.py\"!")
+    sys.exit(1)
 
 import argparse
 import socket
@@ -17,11 +17,18 @@ import collections
 import random
 import time
 import datetime
+import struct
 
 
 output_file_lock = threading.Lock()
 output_file_handler = None
 credQueue = queue.Queue()
+scanQueue = queue.Queue()
+scanProgress = 0
+scanResults = []
+scanTotal = 0
+scanProgressLast = -1
+scanProgressLock = threading.Lock()
 
 
 
@@ -33,16 +40,18 @@ list_of_codes = collections.OrderedDict([('LOGON_FAILURE',                      
                                          ('STATUS_BAD_NETWORK_NAME',             'Bad Network Name'),
                                          ('STATUS_IO_TIMEOUT',                   'IO Timeout on Target'),
                                          ('STATUS_CONNECTION_RESET',             'Connection Reset'),
-					 ('STATUS_INVALID_NETWORK_RESPONSE',     'Invalid Response'),
+                                         ('STATUS_INVALID_NETWORK_RESPONSE',     'Invalid Response'),
                                          ('STATUS_INSUFF_SERVER_RESOURCES',      'No Resources Available'),
                                          ('STATUS_TRUSTED_RELATIONSHIP_FAILURE', 'Trust Relation Failed'),
                                          ('STATUS_LOGON_TYPE_NOT_GRANTED',       'Logon Type Not Granted'),
                                          ('STATUS_INVALID_PARAMETER',            'Invalid Parameter'),
                                          ('STATUS_DUPLICATE_NAME',               'Duplicate Name'),
-					 ('STATUS_NOT_IMPLEMENTED',		 'Invalid Function'),
-					 ('STATUS_ACCOUNT_LOCKED_OUT',		 'Account Locked!'),
-					 ('STATUS_ACCOUNT_DISABLED',		 'Account Disabled'),
-					 ('STATUS_CONNECTION_DISCONNECTED',      'Connection Disconnected'),
+                                         ('STATUS_NOT_IMPLEMENTED',              'Invalid Function'),
+                                         ('STATUS_ACCOUNT_LOCKED_OUT',           'Account Locked!'),
+                                         ('STATUS_ACCOUNT_DISABLED',             'Account Disabled'),
+                                         ('STATUS_CONNECTION_DISCONNECTED',      'Connection Disconnected'),
+                                         ('STATUS_HOST_UNREACHABLE',             'Host Unreachable'),
+                                         ('STATUS_CONNECTION_REFUSED',           'Connection Refused'),
                                          (' D ',                                 'LOCAL ADMIN! Valid')
                                        ])
 
@@ -67,8 +76,8 @@ domain_reg = re.compile("Domain=\[([^\]]+)\]")
 regResult = re.compile("NT_([a-zA-Z_]*)")
 
 
-version_number = '2.1'
-version_build = '11/03/2017'
+version_number = '2.3'
+version_build = '1/26/2018'
 
 
 text_green = '\033[92m'
@@ -79,7 +88,7 @@ text_end = '\033[0m'
 
 
 def main():
-    global output_file_handler, settings, text_green, text_blue, text_yellow, text_red, text_end
+    global output_file_handler, settings, text_green, text_blue, text_yellow, text_red, text_end, scanProgress, scanTotal
     print(text_blue + """
 
 
@@ -116,6 +125,7 @@ def main():
     settings['no_color'] = args.no_color
     hosts_to_check = []
     creds_to_check = []
+    scanProgress = 0
     mode = 'all'
     if settings['no_color']:
         text_blue = ''
@@ -143,9 +153,13 @@ def main():
         with open(args.servers) as serverfile:
             for line in serverfile:
                 if line.strip():
-                    hosts_to_check.append(line.strip())
+                    if args.servers.endswith(".gnmap"):
+                        if "445/open" in line:
+                            hosts_to_check.append(line.split(' ')[1])
+                    else:
+                        hosts_to_check.extend(parseServers(line.strip()))
     else:
-        hosts_to_check.append(args.servers)
+        hosts_to_check.extend(parseServers(args.servers))
     if len(hosts_to_check) == 0 or len(creds_to_check) == 0:
         print(text_red + "ERROR: You must supply hosts and credentials at least!" + text_end)
         sys.exit(1)
@@ -176,35 +190,31 @@ def main():
         args.threads = len(hosts_to_check) * len(creds_to_check)
 
     try:
-        if settings['os'] or settings['domain'] or settings['users']:
-            print(text_yellow + ("%-35s %-35s %-35s %-25s %s" % ("Server", "Username", passwd_header, "Response", "Info")) + text_end)
-        else:
-            print(text_yellow + ("%-35s %-35s %-35s %-25s " % ("Server", "Username", passwd_header, "Response")) + text_end)
-        print(text_yellow + "------------------------------------------------------------------------------------------------------------------------------------------------------" + text_end)
-
         if args.stripe == None:
             total = len(hosts_to_check)
             done = -1
             last_status_report = -1
             if settings['scan']:
-                print(text_green + "[!] Starting scan of port 445 on all " + str(len(hosts_to_check)) + " hosts...." +  text_end)
-            for host in hosts_to_check:
-                done += 1
-                if settings['scan']:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(settings['scan_timeout'])
-                    percent_done = int((done / total) * 100)
-                    if (percent_done%5 == 0 and percent_done != last_status_report):
-                        print(text_green + "[*] " + str(percent_done) + "% done... [" + str(done) + "/" + str(total) + "]" + text_end)
-                        last_status_report = percent_done
-                    try:
-                        s.connect((host,445))
-                        s.close()
-                    except Exception:
-                        print("%-35s %-35s %-35s %-25s" % (host, "N/A", "N/A", text_red + "Failed Portscan" + text_end))
-                        continue
-                for cred in creds_to_check:
-                    credQueue.put([host, cred])
+                print(text_green + "[!] Starting scan of port 445 on all " + str(len(hosts_to_check)) + " hosts (using " + str(args.threads) + " threads)...." +  text_end)
+            if settings['scan']:
+                scanTotal = len(hosts_to_check)
+                for host in hosts_to_check:
+                    scanQueue.put(host)
+                thread_list = []
+                for i in range(args.threads):
+                    thread_list.append(ScanThread(445))
+                for t in thread_list:
+                    t.daemon = True
+                    t.start()
+                for t in thread_list:
+                    t.join()
+                for host in scanResults:
+                    for cred in creds_to_check:
+                        credQueue.put([host, cred])
+            else:
+                for host in hosts_to_check:
+                    for cred in creds_to_check:
+                        credQueue.put([host, cred])
         else:
             if len(hosts_to_check) < len(creds_to_check):
                 print(text_red + "ERROR: For striping to work, you must have the same number or more hosts than you do creds!"  + text_end)
@@ -215,6 +225,14 @@ def main():
             for i in range(len(creds_to_check)):
                 credQueue.put([hosts_to_check[i], creds_to_check[i]])
 
+        if settings['scan']:
+            print(text_green + "[!] Done scanning!  Starting CredNinja against " + str(len(scanResults)) + " live hosts...." +  text_end)
+
+        if settings['os'] or settings['domain'] or settings['users']:
+            print(text_yellow + ("%-35s %-35s %-35s %-25s %s" % ("Server", "Username", passwd_header, "Response", "Info")) + text_end)
+        else:
+            print(text_yellow + ("%-35s %-35s %-35s %-25s " % ("Server", "Username", passwd_header, "Response")) + text_end)
+        print(text_yellow + "------------------------------------------------------------------------------------------------------------------------------------------------------" + text_end)
         thread_list = []
         for i in range(args.threads):
             thread_list.append(CredThread(mode, command_list))
@@ -270,6 +288,19 @@ def add_sorted_users(user, days, full_list):
             return
     full_list.append([user,days])
     
+def parseServers(server):
+    if '/' not in server:
+        return [server]
+    (ip, cidr) = server.split('/')
+    cidr = int(cidr)
+    host_bits = 32 - cidr
+    i = struct.unpack('>I', socket.inet_aton(ip))[0]
+    start = (i >> host_bits) << host_bits
+    end = i | ((1 << host_bits) - 1)
+    ret = []
+    for i in range(start, end):
+        ret.append(socket.inet_ntoa(struct.pack('>I', i)))
+    return ret
 
 
 def run_check(mode, stock_command, system, cred):
@@ -402,15 +433,45 @@ class CredThread (threading.Thread):
         except queue.Empty as e:
             return
 
+class ScanThread (threading.Thread):
+    def __init__(self, port):
+        threading.Thread.__init__(self)
+        self.port = port
 
+    def run(self):
+        global scanProgress, scanTotal, scanProgressLock, scanProgressLast
+        queue_item = None
+        try:
+            while True:
+                queue_item = scanQueue.get(False)
+                if queue_item is None:
+                    break
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(settings['scan_timeout'])
+                success = True
+                try:
+                    s.connect((queue_item,self.port))
+                    s.close()
+                except Exception:
+                    #print("%-35s %-35s %-35s %-25s" % (queue_item, "N/A", "N/A", text_red + "Failed Portscan " + str(scanProgress) + " - " + str(scanTotal) + text_end))
+                    success = False
+                if success:
+                    scanResults.append(queue_item)
+                with scanProgressLock:
+                    scanProgress += 1
+                    try:
+                        percent_done = int((scanProgress / scanTotal) * 100)
+                        if (percent_done%5 == 0 and percent_done != scanProgressLast):
+                            print(text_green + "[*] " + str(percent_done) + "% done... (" + str(len(scanResults)) + " hosts up) [" + str(scanProgress) + "/" + str(scanTotal) + "]" + text_end)
+                            scanProgressLast = percent_done
+                    except Exception:
+                        pass
+                time.sleep(0.01)
+        except queue.Empty as e:
+            return
 
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
 
 
