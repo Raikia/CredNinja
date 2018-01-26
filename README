@@ -1,5 +1,3 @@
-This tool supersedes my other tool CredSwissArmy.
-
 This tool is intended for penetration testers who want to perform an engagement 
 quickly and efficiently. While this tool can be used for more covert operations 
 (including some additions below), it really shines when used at the scale of a 
@@ -30,7 +28,7 @@ It is intended to be run on Kali Linux
                                                                d88P          
                                                              888P"           
 
-                    v2.0 (Built 6/24/2016) - Chris King (@raikiasec)
+                    v2.3 (Built 1/26/2018) - Chris King (@raikiasec)
 
                          For help: ./CredNinja.py -h
 
@@ -50,8 +48,10 @@ Required Arguments:
                         A word or file of user credentials to test. Usernames
                         are accepted in the form of "DOMAIN\USERNAME:PASSWORD"
   -s systems_to_test.txt, --servers systems_to_test.txt
-                        A word or file of servers to test against. Each
-                        credential will be tested against each of these
+                        A word or file of servers to test against. This can
+			be a single system, a filename containing a list of
+			systems, a gnmap file, or IP addresses in cidr notation.
+			Each credential will be tested against each of these
                         servers by attempting to browse C$ via SMB
 
 Optional Arguments:
@@ -110,6 +110,16 @@ Additional Information Retrieval:
 
 
 Changelog:
+
+   v2.3 - Updated with some additional features
+        
+	* Added gnmap file parsing.  The file provided to the --systems (-s) argument
+	  can now be a gnmap file (ending in .gnmap)
+	* Added cidr notation parsing. The IP address provided to the --systems (-s)
+	  argument can now be in cidr notation and it will properly expand the range
+	  and test all systems within the ip space (make sure you provide --scan to 
+	  scan the systems ahead of time!)
+	* Made --scan multithreaded so it runs MUCH faster
 
    v2.0 - Initial release of CredNinja from the predecessor CredSwissArmy:
 

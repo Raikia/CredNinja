@@ -376,7 +376,7 @@ def parse_cli_args():
 
     mandatory_args = parser.add_argument_group('Required Arguments')
     mandatory_args.add_argument('-a','--accounts', default=None, required=True, metavar='accounts_to_test.txt', help='A word or file of user credentials to test. Usernames are accepted in the form of "DOMAIN\\USERNAME:PASSWORD"')
-    mandatory_args.add_argument('-s', '--servers', default=None, required=True, metavar='systems_to_test.txt', help='A word or file of servers to test against. Each credential will be tested against each of these servers by attempting to browse C$ via SMB')
+    mandatory_args.add_argument('-s', '--servers', default=None, required=True, metavar='systems_to_test.txt', help='A word or file of servers to test against. This can be a gnmap file or contain cidr ip addresses. Each credential will be tested against each of these servers by attempting to browse C$ via SMB')
  
     optional_args = parser.add_argument_group('Optional Arguments')
     optional_args.add_argument('-t', '--threads', default=10, type=int, help='Number of threads to use. Defaults to 10')
