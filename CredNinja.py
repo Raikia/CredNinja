@@ -22,6 +22,7 @@ import struct
 
 output_file_lock = threading.Lock()
 output_file_handler = None
+output_file = None
 credQueue = queue.Queue()
 scanQueue = queue.Queue()
 scanProgress = 0
@@ -88,7 +89,7 @@ text_end = '\033[0m'
 
 
 def main():
-    global output_file_handler, settings, text_green, text_blue, text_yellow, text_red, text_end, scanProgress, scanTotal
+    global output_file_handler, output_file, settings, text_green, text_blue, text_yellow, text_red, text_end, scanProgress, scanTotal
     print(text_blue + """
 
 
@@ -172,8 +173,11 @@ def main():
     if args.invalid and args.valid:
         mode = 'a'
 
+    #if args.output:
+    #    output_file_handler = open(args.output, 'w')
+
     if args.output:
-        output_file_handler = open(args.output, 'w')
+        output_file = args.output
     
     command_list = ['smbclient', '-U', '', '', '', '-c', 'dir', '-m', 'SMB3']
     if args.ntlm and shutil.which('pth-smbclient') is None:
@@ -363,7 +367,9 @@ def check_result(output):
     return ['Unknown', 'No Data', add_on]
 
 def write_output(text):
-    global output_file_handler
+    global output_file_handler, output_file
+    if output_file and text != '':
+        output_file_handler = open(output_file, 'w')
     if output_file_handler is None:
         return
     output_file_lock.acquire()
