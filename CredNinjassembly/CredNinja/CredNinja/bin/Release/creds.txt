@@ -1,5 +1,0 @@
-WORKGROUP\Administrator:test
-WORKGROUP\Administrator:test1
-WORKGROUP\Administrator:test2
-.\commando:Kevin1359!
-WORKGROUP\Administrator:test3
