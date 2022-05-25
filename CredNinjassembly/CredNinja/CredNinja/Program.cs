@@ -6,21 +6,25 @@ using System.Diagnostics; //ProductVersion for GetOS
 using System.IO; //GetDirectories
 using System.Runtime.InteropServices; //WNet functions
 using System.Threading;
+using System.Linq;
 
 namespace CredNinja
 {
     public class Options
     {
-        [NamedArgument("hosts", Description = "The hostnames to attempt to authenticate to in a comma-delimited list.", Required = true)]
+        [NamedArgument("hosts", Description = "The hostnames to attempt to authenticate to in a comma-delimited list or per line in a file.", Required = true)]
         public string hosts { get; set; }
 
-        [NamedArgument("creds", Description = "The credentials to use to attempt to authenticate as in a comma-delimited list. The proper format for this is \"DOMAIN\\Username:Password\"", Required = true)]
+        [NamedArgument("creds", Description = "The credentials to use to attempt to authenticate as in a comma-delimited list or a file. " +
+            "The proper format for this is \"DOMAIN\\Username:Password\"", Required = true)]
         public string creds { get; set; }
 
-        [NamedArgument("scan", Description = "Switch, if enabled it will test connection to port 445 for each host before trying to authenticate. Default False.", Constraint = NumArgsConstraint.Optional, Const = true, Required = false)]
+        [NamedArgument("scan", Description = "Switch, if enabled it will test connection to port " +
+            "445 for each host before trying to authenticate. Default False.", Constraint = NumArgsConstraint.Optional, Const = true, Required = false)]
         public bool scan { get; set; }
 
-        [NamedArgument("users", Description = "Switch, if enabled will list the users that have logged in to the system in the last 6 months (requires LOCAL ADMIN). Returns usernames with the number of days since their home directory was changed. Default false.", Constraint = NumArgsConstraint.Optional, Const = true, Required = false)]
+        [NamedArgument("users", Description = "Switch, if enabled will list the users that have logged in to the " +
+            "system in the last 6 months (requires LOCAL ADMIN). Returns usernames with the number of days since their home directory was changed. Default false.", Constraint = NumArgsConstraint.Optional, Const = true, Required = false)]
         public bool users { get; set; }
 
         [NamedArgument("os", Description = "Switch, if enabled will display the OS of the system if available. Default false. ", Constraint = NumArgsConstraint.Optional, Const = true, Required = false)]
@@ -47,7 +51,7 @@ namespace CredNinja
         [NamedArgument("delim", Description = "If given, this will change the delimiter between usernames and passwords. Default is \":\".", Required = false)]
         public char delim { get; set; }
 
-        [NamedArgument('o', "output", Description = "File/filepath to output results. This isn't error checked so be careful.", Required = false)]
+        [NamedArgument('o', "output", Description = "File/filepath to output results.", Required = false)]
         public string output { get; set; }
 
         [NamedArgument("threads", Description = "Number of threads to use. Defaults to 10.", Required = false)]
@@ -125,8 +129,30 @@ namespace CredNinja
             public string ui2_domainname;
         }
 
+        //Parse file input
+        static public string[] ParseCreds(string creds_file)
+        {
+            List<string> creds = new List<string>();
+
+            foreach (string singleCred in System.IO.File.ReadAllLines(creds_file))
+                creds.Add(singleCred);
+
+            //Unique list and return array
+            return creds.Distinct().ToArray();
+        }
+
+        //Parse hosts input
+        static public string[] ParseHosts(string hosts_file)
+        {
+            List<string> hosts = new List<string>();
+
+            foreach (string singleHost in System.IO.File.ReadAllLines(hosts_file))
+                hosts.Add(singleHost);
+            return hosts.Distinct().ToArray();
+        }
+
         //Actual CredNinja stuff
-        static public void Exec(string[] raw_hosts, string[] raw_credentials, char delim, bool getusers, double userstime, bool valid, bool invalid, bool getos, string output, int threads, int delay)
+        static public void Exec(string[] hosts, string[] credentials, char delim, bool getusers, double userstime, bool valid, bool invalid, bool getos, string output, int threads, int delay)
         {
             ConsoleColor defaultColor = Console.ForegroundColor;
             //Declarations 
@@ -147,30 +173,10 @@ namespace CredNinja
             }
 
             //Write header
-            Console.WriteLine("");
+            Console.WriteLine();
             Console.WriteLine(header);
             Console.WriteLine(divider);
-            // Unique both raw_hosts and raw_credentials
-            string[] hosts;
-            string[] credentials;
-            List<String> tempArr = new List<string>();
-            for (int i = 0; i < raw_hosts.Length; i++)
-            {
-                if (tempArr.Contains(raw_hosts[i]) == false)
-                {
-                    tempArr.Add(raw_hosts[i]);
-                }
-            }
-            hosts = tempArr.ToArray();
-            tempArr = new List<string>();
-            for (int i = 0; i < raw_credentials.Length; i++)
-            {
-                if (tempArr.Contains(raw_credentials[i]) == false)
-                {
-                    tempArr.Add(raw_credentials[i]);
-                }
-            }
-            credentials = tempArr.ToArray();
+            
             //Check each host threaded 
             threads = Math.Min(threads, hosts.Length);
             int noDelimCreds = 0;
@@ -340,9 +346,16 @@ namespace CredNinja
                         Console.ForegroundColor = ConsoleColor.Red;
 
                     Console.WriteLine(final);
+                    //Let's check for output file first so we don't overwrite
                     if (output != null)
                     {
-                        File.AppendAllText(output, final + Environment.NewLine);
+                        if (!String.IsNullOrEmpty(output))
+                        {
+                            if (File.Exists(output))
+                                output = "credninja_output_" + DateTime.Now.ToString("M-dd-yyyy_HH-mm-ss") + ".txt";
+
+                            File.AppendAllText(output, final + Environment.NewLine);
+                        }
                     }
                 }
             }
@@ -350,7 +363,6 @@ namespace CredNinja
             Interlocked.Decrement(ref workingCounter);
             Interlocked.Increment(ref processedCounter);
             return;
-
         }
 
         static public string GetOS(string target)
@@ -462,41 +474,8 @@ namespace CredNinja
 
         static void Main(string[] args)
         {
-            string info = @"
-
-   .d8888b.                       888 888b    888 d8b           d8b          
-  d88P  Y88b                      888 8888b   888 Y8P           Y8P          
-  888    888                      888 88888b  888                            
-  888        888d888 .d88b.   .d88888 888Y88b 888 888 88888b.  8888  8888b.  
-  888        888P""  d8P Y8b d88"" 888 888 Y88b888 888 888 ""88b ""888     ""88b
-  888    888 888    88888888 888  888 888  Y88888 888 888  888  888.d888888
-  Y88b  d88P 888    Y8b.Y88b 888 888   Y8888 888 888  888  888 888  888
-   ""Y8888P""  888     ""Y8888   ""Y88888 888    Y888 888 888  888  888 ""Y888888 
-                                                                888
-                                                               d88P
-                                                             888P""
-                    Chris King(@raikiasec)
-
-                  For help: CredNinja.exe -h
-
-This script is designed to identify if credentials are valid, invalid, 
-or local admin valid credentials within a domain network and will also check 
-for local admin. It works by attempting to mount C$ on each server using 
-different credentials.
-
-    Author: Chris King (@raikiasec)
-    Massive Contributor: Alyssa Rahman (@ramen0x3f)
-
-Example:
-	> CredNinja.exe --creds test\raikia:hunter2,test\user:password --hosts 10.10.10.10,10.20.20.20,10.30.30.30 --users --os 
-
-Links: 
-    https://github.com/Raikia/CredNinja
-    https://twitter.com/raikiasec
-    https://twitter.com/ramen0x3f";
-
             //Print help
-            if (args.Length==0)
+            if (args.Length == 0)
             {
                 Console.WriteLine(info);
                 return;
@@ -519,8 +498,42 @@ Links:
             }
 
             //Convert hosts and creds to arrays 
-            string[] hosts = opt.hosts.Split(',');
-            string[] creds = opt.creds.Split(',');
+            string[] hosts = null;
+            string[] creds = null;
+
+            if (File.Exists(opt.hosts))
+            {
+                try
+                {
+                    hosts = ParseHosts(opt.hosts);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                }
+            }
+
+            else
+            {
+                hosts = opt.hosts.Split(',');
+            }
+
+            if (File.Exists(opt.creds))
+            {
+                try
+                {
+                    creds = ParseCreds(opt.creds);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                }
+            }
+
+            else
+            {
+                creds = opt.creds.Split(',');
+            }
 
             //Reduce Hosts list to only live hosts if told to scan
             if (opt.scan)
@@ -557,5 +570,42 @@ Links:
                 Console.WriteLine("An error occurred: '{0}'", e);
             }
         }
+
+        static string info = @"
+
+       .d8888b.                       888 888b    888 d8b           d8b          
+      d88P  Y88b                      888 8888b   888 Y8P           Y8P          
+      888    888                      888 88888b  888                            
+      888        888d888 .d88b.   .d88888 888Y88b 888 888 88888b.  8888  8888b.  
+      888        888P""  d8P Y8b d88"" 888 888 Y88b888 888 888 ""88b ""888     ""88b
+      888    888 888    88888888 888  888 888  Y88888 888 888  888  888.d888888
+      Y88b  d88P 888    Y8b.Y88b 888 888   Y8888 888 888  888  888 888  888
+       ""Y8888P""  888     ""Y8888   ""Y88888 888    Y888 888 888  888  888 ""Y888888 
+                                                                    888
+                                                                   d88P
+                                                                 888P""
+                        Chris King(@raikiasec)
+
+                      For help: CredNinja.exe -h
+
+    This script is designed to identify if credentials are valid, invalid, 
+    or local admin valid credentials within a domain network and will also check 
+    for local admin. It works by attempting to mount C$ on each server using 
+    different credentials.
+
+        Author: Chris King (@raikiasec)
+        Massive Contributor: Alyssa Rahman (@ramen0x3f)
+        Quite Minor Contributor: Matt Grandy (@Matt_Grandy_)
+
+    Example:
+	    > CredNinja.exe --creds test\raikia:hunter2,test\user:password --hosts 10.10.10.10,10.20.20.20,10.30.30.30 --users --os 
+	    > CredNinja.exe --creds creds.txt --hosts hosts.txt --users --os 
+
+
+    Links: 
+        https://github.com/Raikia/CredNinja
+        https://twitter.com/raikiasec
+        https://twitter.com/ramen0x3f
+        https://twitter.com/Matt_Grandy_";//:)
     }
 }
