@@ -12,7 +12,7 @@ namespace CredNinja
 {
     public class Options
     {
-        [NamedArgument("hosts", Description = "The hostnames to attempt to authenticate to in a comma-delimited list.", Required = true)]
+        [NamedArgument("hosts", Description = "The hostnames to attempt to authenticate to in a comma-delimited list or per line in a file.", Required = true)]
         public string hosts { get; set; }
 
         [NamedArgument("creds", Description = "The credentials to use to attempt to authenticate as in a comma-delimited list or a file. " +
